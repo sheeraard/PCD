@@ -1,29 +1,23 @@
-
 # app.py
-import os
-from flask import Flask, render_template, request, redirect, url_for, send_file
+import streamlit as st
 import cv2
 import numpy as np
 import pandas as pd
-from werkzeug.utils import secure_filename
 from io import BytesIO
 import base64
-from matplotlib import pyplot as plt
+import os
 
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+st.set_page_config(page_title="Flood Segmentation Tool")
 
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
+UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ---------------- Helpers ----------------
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
-def segment_flood(img_path):
-    img = cv2.imread(img_path)
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def segment_flood(img):
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, mask_pred = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
@@ -44,48 +38,43 @@ def calculate_metrics(pred, gt):
     acc = (pred_bin == gt_bin).sum() / gt_bin.size
     return iou, dice, acc
 
-def image_to_base64(img):
-    _, buffer = cv2.imencode('.png', cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
-    return base64.b64encode(buffer).decode('utf-8')
+def image_to_bytes(img):
+    _, buffer = cv2.imencode(".png", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+    return buffer.tobytes()
 
-# ---------------- Routes ----------------
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    results = []
-    if request.method == 'POST':
-        files = request.files.getlist('images')
-        for f in files:
-            if f and allowed_file(f.filename):
-                filename = secure_filename(f.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                f.save(filepath)
+st.title("Flood Area Segmentation Tool")
+uploaded_files = st.file_uploader("Upload images", type=list(ALLOWED_EXTENSIONS), accept_multiple_files=True)
 
-                img, mask_pred = segment_flood(filepath)
-                mask_gt = create_fake_groundtruth(mask_pred)
-                iou, dice, acc = calculate_metrics(mask_pred, mask_gt)
+results = []
+if uploaded_files:
+    for file in uploaded_files:
+        if allowed_file(file.name):
+            bytes_data = np.frombuffer(file.read(), np.uint8)
+            img = cv2.imdecode(bytes_data, cv2.IMREAD_COLOR)
+            
+            img_rgb, mask_pred = segment_flood(img)
+            mask_gt = create_fake_groundtruth(mask_pred)
+            iou, dice, acc = calculate_metrics(mask_pred, mask_gt)
 
-                results.append({
-                    'filename': filename,
-                    'iou': round(iou, 3),
-                    'dice': round(dice, 3),
-                    'acc': round(acc, 3),
-                    'img': image_to_base64(img),
-                    'mask_pred': image_to_base64(mask_pred),
-                    'mask_gt': image_to_base64(mask_gt)
-                })
+            results.append({
+                "filename": file.name,
+                "iou": round(iou, 3),
+                "dice": round(dice, 3),
+                "acc": round(acc, 3),
+                "img": img_rgb,
+                "mask_pred": mask_pred,
+                "mask_gt": mask_gt
+            })
 
-        # Save CSV
-        df = pd.DataFrame(results)
-        df.to_csv(os.path.join(app.config['UPLOAD_FOLDER'], 'report.csv'), index=False)
+    # Display results
+    for r in results:
+        st.subheader(r["filename"])
+        st.image(r["img"], caption="Original Image", use_column_width=True)
+        st.image(r["mask_pred"], caption="Predicted Mask", use_column_width=True)
+        st.image(r["mask_gt"], caption="Ground Truth (simulated)", use_column_width=True)
+        st.write(f"IoU: {r['iou']} | Dice: {r['dice']} | Pixel Accuracy: {r['acc']}")
 
-    return render_template('index.html', results=results)
-
-@app.route('/download')
-def download():
-    path = os.path.join(app.config['UPLOAD_FOLDER'], 'report.csv')
-    return send_file(path, as_attachment=True)
-
-if __name__ == "__main__":
-    app.run(debug=True)
-
-
+    # Save CSV
+    df = pd.DataFrame([{"filename": r["filename"], "iou": r["iou"], "dice": r["dice"], "acc": r["acc"]} for r in results])
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("Download CSV Report", csv, "report.csv", "text/csv")
