@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flood Segmentation Tool</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;600&display=swap');
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Satoshi', Arial, sans-serif;
+    background: #1b1b2f;
+    color: #fff;
+    margin: 0;
+    padding: 20px;           /* allow scrolling */
+    min-height: 100vh;
+}
+
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column; /* stack header + results */
+    width: 100%;
+}
+header {
+    width: 100%;
+    max-width: 1200px;
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.upload-section {
+    background: linear-gradient(135deg, #271E4A, #5D47B0);
+    padding: 40px 20px;
+    border-radius: 25px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+.upload-section h2 {
+    font-size: clamp(28px, 6vw, 48px);
+    text-align: center;
+}
+
+.upload-section p {
+    font-size: clamp(14px, 3vw, 20px);
+    text-align: center;
+    line-height: 1.4;
+}
+
+.upload-section form {
+    display: flex;
+    flex-direction: column; /* stack input + button vertically */
+    align-items: center;    /* center horizontally */
+    gap: 15px;
+    width: 100%;
+}
+
+.upload-section input[type="file"] {
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    font-size: 16px;
+    width: 100%;
+    max-width: 240px;
+    align-items: center;
+}
+
+button {
+    padding: 14px 28px;
+    font-size: clamp(16px, 2.5vw, 20px);
+    cursor: pointer;
+    background: #7E5FF8;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    transition: background 0.3s;
+    width: 100%;
+    max-width: 200px;
+}
+
+button2 {
+    padding: 14px 28px;
+    font-size: clamp(16px, 2.5vw, 20px);
+    cursor: pointer;
+    background: #000000;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    transition: background 0.3s;
+    width: 100%;
+    max-width: 200px;
+}
+
+button:hover {
+    background: #000000;
+}
+
+.results-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;   /* center heading and results */
+    width: 100%;
+    margin-top: 40px;
+}
+
+.results {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 25px;
+    width: 100%;
+    max-width: 1200px;
+    justify-items: center;  /* center cards in each column */
+}
+
+
+.card {
+    background: #000000;
+    color: #ffffff;
+    border-radius: 15px;
+    padding: 15px;
+    width: 300px;
+    text-align: center;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+}
+
+.card img {
+    width: 100%;
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+
+table {
+    width: 90%;
+    max-width: 900px;
+    margin: 30px auto;
+    border-collapse: collapse;
+    color: #fff;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 10px;
+    text-align: center;
+}
+
+th {
+    background: #271E4A;
+    color: #fff;
+}
+
+@media (max-width: 600px) {
+    .upload-section h2 {
+        font-size: 28px;
+    }
+    .upload-section p {
+        font-size: 16px;
+    }
+    .card {
+        width: 90%;
+    }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="upload-section">
+        <h2>Flood Area Segmentation Tool</h2>
+        <p>Upload images, run segmentation, and view metrics instantly.</p>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="images" multiple required>
+            <button type="submit">Run</button>
+        </form>
+    </div>
+
+    {% if results %}
+    <div class="results-section">
+        <h2>Segmentation Results</h2>
+        <div class="results">
+            {% for r in results %}
+            <div class="card">
+                <h3>{{ r.filename }}</h3>
+                <img src="data:image/png;base64,{{ r.img }}" alt="Original">
+                <p>Predicted Mask:</p>
+                <img src="data:image/png;base64,{{ r.mask_pred }}" alt="Predicted Mask">
+                <p>Ground Truth (simulated):</p>
+                <img src="data:image/png;base64,{{ r.mask_gt }}" alt="Ground Truth">
+                <p>IoU: {{ r.iou }} | Dice: {{ r.dice }} | Pixel Acc: {{ r.acc }}</p>
+            </div>
+            {% endfor %}
+        </div>
+        <div style="text-align:center; margin-top:20px;">
+            <a href="/download"><button2>Download CSV Report</button2></a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+</body>
+</html>
+
+<div id="loading" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; 
+    background: rgba(0,0,0,0.7); color:white; font-size:2rem; justify-content:center; align-items:center; z-index:9999;">
+    Processing...
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.querySelector('.upload-section form');
+    const loading = document.getElementById('loading');
+
+    form.addEventListener('submit', () => {
+        loading.style.display = 'flex';  // show overlay when form is submitted
+    });
+});
+</script>
+
